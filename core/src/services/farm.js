@@ -945,6 +945,33 @@ async function runFarmOperation(opType) {
         if (batchOps.length > 0) await Promise.all(batchOps);
     }
 
+    // 执行铲除
+    if (opType === 'remove') {
+        const allLandsWithPlants = [...status.growing, ...status.harvestable, ...status.dead];
+        if (allLandsWithPlants.length > 0) {
+            try {
+                await removePlant(allLandsWithPlants);
+                log('铲除', `已铲除 ${allLandsWithPlants.length} 块土地上的作物 (${allLandsWithPlants.join(',')})`, {
+                    module: 'farm',
+                    event: 'remove_plant',
+                    result: 'ok',
+                    count: allLandsWithPlants.length,
+                    landIds: [...allLandsWithPlants],
+                });
+                actions.push(`铲除${allLandsWithPlants.length}`);
+                recordOperation('remove', allLandsWithPlants.length);
+            } catch (e) {
+                logWarn('铲除', e.message, {
+                    module: 'farm',
+                    event: 'remove_plant',
+                    result: 'error',
+                });
+            }
+        } else {
+            log('铲除', '没有可铲除的作物');
+        }
+    }
+
     // 执行收获
     let harvestedLandIds = [];
     let harvestReply = null;
