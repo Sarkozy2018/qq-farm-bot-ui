@@ -56,6 +56,8 @@ const DEFAULT_ACCOUNT_CONFIG = {
         farmMax: 2,
         friendMin: 10,
         friendMax: 10,
+        stealMin: 1,  // 偷菜间隔最小值(秒)
+        stealMax: 2,  // 偷菜间隔最大值(秒)
     },
     friendQuietHours: {
         enabled: false,
@@ -452,6 +454,14 @@ function normalizeIntervals(intervals) {
     let friendMax = toSec(src.friendMax, friend);
     if (friendMin > friendMax) [friendMin, friendMax] = [friendMax, friendMin];
 
+    // 偷菜间隔配置，默认1-2秒
+    let stealMin = Math.max(1, Number.parseInt(src.stealMin, 10) || 1);
+    let stealMax = Math.max(1, Number.parseInt(src.stealMax, 10) || 2);
+    if (stealMin > stealMax) [stealMin, stealMax] = [stealMax, stealMin];
+    // 限制最大值不超过30秒，防止设置过大
+    stealMin = Math.min(stealMin, 30);
+    stealMax = Math.min(stealMax, 30);
+
     return {
         ...src,
         farm,
@@ -460,6 +470,8 @@ function normalizeIntervals(intervals) {
         farmMax,
         friendMin,
         friendMax,
+        stealMin,
+        stealMax,
     };
 }
 

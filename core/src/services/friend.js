@@ -4,7 +4,7 @@
 
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
-const { isAutomationOn, getFriendQuietHours, getFriendBlacklist } = require('../models/store');
+const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getIntervals } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
@@ -882,6 +882,11 @@ async function checkFriends() {
 
         const totalActions = { steal: 0, water: 0, weed: 0, bug: 0, putBug: 0, putWeed: 0 };
 
+        // 获取当前账号的偷菜间隔配置
+        const intervals = getIntervals(state.gid);
+        const stealMin = Math.max(1, intervals.stealMin || 1);
+        const stealMax = Math.max(stealMin, intervals.stealMax || 2);
+        
         for (let i = 0; i < friendsToVisit.length; i++) {
             const friend = friendsToVisit[i];
             
@@ -896,8 +901,11 @@ async function checkFriends() {
                 // 单个好友访问失败不影响整体
             }
             
-            // 稍微等待，避免请求过快
-            await sleep(200);
+            // 在好友之间添加配置的随机延时
+            if (i < friendsToVisit.length - 1) {  // 不是最后一个好友
+                const randomDelay = Math.floor(Math.random() * (stealMax - stealMin + 1)) + stealMin;
+                await sleep(randomDelay * 1000);  // 转换为毫秒
+            }
         }
 
         // 偷菜后自动出售

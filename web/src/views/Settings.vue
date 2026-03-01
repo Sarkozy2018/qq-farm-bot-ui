@@ -49,7 +49,7 @@ const currentAccountName = computed(() => {
 const localSettings = ref({
   plantingStrategy: 'preferred',
   preferredSeedId: 0,
-  intervals: { farmMin: 2, farmMax: 2, friendMin: 10, friendMax: 10 },
+  intervals: { farmMin: 2, farmMax: 2, friendMin: 10, friendMax: 10, stealMin: 1, stealMax: 2 },
   friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
   automation: {
     farm: false,
@@ -455,6 +455,21 @@ async function handleSaveOffline() {
               label="好友巡查最大 (秒)"
               type="number"
               min="1"
+            />
+            <!-- 偷菜间隔配置 -->
+            <BaseInput
+              v-model.number="localSettings.intervals.stealMin"
+              label="偷菜间隔最小 (秒)"
+              type="number"
+              min="1"
+              max="30"
+            />
+            <BaseInput
+              v-model.number="localSettings.intervals.stealMax"
+              label="偷菜间隔最大 (秒)"
+              type="number"
+              min="1"
+              max="30"
             />
           </div>
 
