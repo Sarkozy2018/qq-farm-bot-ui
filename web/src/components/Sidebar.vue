@@ -197,6 +197,14 @@ const navItems = menuRoutes.map(item => ({
   icon: item.icon,
 }))
 
+// QQ 号脱敏函数：中间 4 位用****代替
+function maskQQ(qq: string | number): string {
+  if (!qq) return ''
+  const qqStr = String(qq)
+  if (qqStr.length <= 8) return qqStr
+  return `${qqStr.slice(0, 3)}****${qqStr.slice(-4)}`
+}
+
 function selectAccount(acc: any) {
   accountStore.setCurrentAccount(acc)
   showAccountDropdown.value = false
@@ -266,7 +274,7 @@ watch(
                   {{ platform }}
                 </span>
                 <span class="truncate text-xs text-gray-400">
-                  {{ currentAccount?.uin || currentAccount?.id || '未选择' }}
+                  {{ currentAccount?.uin ? maskQQ(currentAccount.uin) : (currentAccount?.id || '未选择') }}
                 </span>
               </div>
             </div>
@@ -312,7 +320,7 @@ watch(
                     >
                       {{ getPlatformLabel(acc.platform) }}
                     </span>
-                    <span class="text-xs text-gray-400">{{ acc.uin || acc.id }}</span>
+                    <span class="text-xs text-gray-400">{{ acc.uin ? maskQQ(acc.uin) : acc.id }}</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-1">

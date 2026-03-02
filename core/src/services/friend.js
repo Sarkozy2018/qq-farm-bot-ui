@@ -4,6 +4,7 @@
 
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
+const { parentPort } = require('node:worker_threads');
 const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getIntervals } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
@@ -62,6 +63,52 @@ function inFriendQuietHours(now = new Date()) {
     if (start === end) return true; // 起止相同视为全天静默
     if (start < end) return cur >= start && cur < end;
     return cur >= start || cur < end; // 跨天时段
+}
+
+function isEnterFarmBannedError(error) {
+    const message = String((error && error.message) || error || '');
+    if (!message) return false;
+    return message.includes('1002003');
+}
+
+function postToMaster(payload) {
+    try {
+        if (process.send) {
+            process.send(payload);
+            return true;
+        }
+        if (parentPort && typeof parentPort.postMessage === 'function') {
+            parentPort.postMessage(payload);
+            return true;
+        }
+    } catch {}
+    return false;
+}
+
+function addFriendToBlacklist(friendGid, friendName, reason = '') {
+    const gid = toNum(friendGid);
+    if (!gid) return false;
+    const currentList = getFriendBlacklist();
+    const current = Array.isArray(currentList) ? currentList : [];
+    if (current.includes(gid)) return false;
+
+    const sent = postToMaster({
+        type: 'friend_blacklist_add',
+        gid,
+        friendName: friendName || `GID:${gid}`,
+        reason: String(reason || ''),
+    });
+    if (!sent) return false;
+
+    logWarn('好友', `检测到封禁好友，已自动加入黑名单: ${friendName || `GID:${gid}`}`, {
+        module: 'friend',
+        event: '加黑名单',
+        result: 'auto_blocked',
+        friendName: friendName || `GID:${gid}`,
+        friendGid: gid,
+        reason: String(reason || ''),
+    });
+    return true;
 }
 
 // ============ 好友 API ============
@@ -573,6 +620,10 @@ async function doFriendOperation(friendGid, opType) {
     try {
         enterReply = await enterFriendFarm(gid);
     } catch (e) {
+        if (isEnterFarmBannedError(e)) {
+            addFriendToBlacklist(gid, `GID:${gid}`, e && e.message ? e.message : '');
+            return { ok: true, opType, count: 0, message: '好友已自动加入黑名单' };
+        }
         return { ok: false, message: `进入好友农场失败: ${e.message}`, opType };
     }
 
@@ -686,6 +737,10 @@ async function visitFriend(friend, totalActions, myGid) {
     try {
         enterReply = await enterFriendFarm(gid);
     } catch (e) {
+        if (isEnterFarmBannedError(e)) {
+            addFriendToBlacklist(gid, name, e && e.message ? e.message : '');
+            return;
+        }
         logWarn('好友', `进入 ${name} 农场失败: ${e.message}`, {
             module: 'friend', event: 'enter_farm', result: 'error', friendName: name, friendGid: gid
         });
@@ -843,7 +898,8 @@ async function checkFriends() {
             if (gid === state.gid) continue;
             if (visitedGids.has(gid)) continue;
             if (blacklist.has(gid)) continue;
-            
+            if (String(f.name || '').trim() === '小小农夫' || String(f.remark || '').trim() === '小小农夫') continue;
+
             const name = f.remark || f.name || `GID:${gid}`;
             const p = f.plant;
             const stealNum = p ? toNum(p.steal_plant_num) : 0;
@@ -882,11 +938,6 @@ async function checkFriends() {
 
         const totalActions = { steal: 0, water: 0, weed: 0, bug: 0, putBug: 0, putWeed: 0 };
 
-        // 获取当前账号的偷菜间隔配置
-        const intervals = getIntervals(state.gid);
-        const stealMin = Math.max(1, intervals.stealMin || 1);
-        const stealMax = Math.max(stealMin, intervals.stealMax || 2);
-        
         for (let i = 0; i < friendsToVisit.length; i++) {
             const friend = friendsToVisit[i];
             
@@ -901,11 +952,8 @@ async function checkFriends() {
                 // 单个好友访问失败不影响整体
             }
             
-            // 在好友之间添加配置的随机延时
-            if (i < friendsToVisit.length - 1) {  // 不是最后一个好友
-                const randomDelay = Math.floor(Math.random() * (stealMax - stealMin + 1)) + stealMin;
-                await sleep(randomDelay * 1000);  // 转换为毫秒
-            }
+            // 稍微等待，避免请求过快
+            await sleep(200);
         }
 
         // 偷菜后自动出售

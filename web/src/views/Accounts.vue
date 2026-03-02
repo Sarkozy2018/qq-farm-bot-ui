@@ -78,6 +78,16 @@ function selectAccount(account: any) {
     return
   accountStore.selectAccount(String(account.id))
 }
+
+// QQ 号脱敏函数：中间 4 位用****代替
+function maskQQ(qq: string | number): string {
+  if (!qq)
+    return ''
+  const qqStr = String(qq)
+  if (qqStr.length <= 8)
+    return qqStr
+  return `${qqStr.slice(0, 3)}****${qqStr.slice(-4)}`
+}
 </script>
 
 <template>
@@ -142,7 +152,7 @@ function selectAccount(account: any) {
                   {{ getPlatformLabel(acc.platform) }}
                 </span>
                 <span class="text-sm text-gray-500">
-                  {{ acc.uin || '未绑定' }}
+                  {{ acc.uin ? maskQQ(acc.uin) : '未绑定' }}
                 </span>
               </div>
             </div>
