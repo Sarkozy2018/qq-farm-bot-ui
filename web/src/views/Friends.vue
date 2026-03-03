@@ -22,6 +22,7 @@ const confirmLoading = ref(false)
 const pendingAction = ref<(() => Promise<void>) | null>(null)
 const avatarErrorKeys = ref<Set<string>>(new Set())
 const searchKeyword = ref('')
+const refreshing = ref(false)
 
 function confirmAction(msg: string, action: () => Promise<void>) {
   confirmMessage.value = msg
@@ -76,6 +77,20 @@ async function loadFriends() {
       friendStore.fetchFriends(currentAccountId.value)
       friendStore.fetchBlacklist(currentAccountId.value)
     }
+  }
+}
+
+async function refreshFriends() {
+  if (refreshing.value || !currentAccountId.value)
+    return
+  
+  refreshing.value = true
+  try {
+    expandedFriends.value.clear()
+    await loadFriends()
+  }
+  finally {
+    refreshing.value = false
   }
 }
 
@@ -181,6 +196,13 @@ function handleFriendAvatarError(friend: any) {
       <h2 class="flex items-center gap-2 text-2xl font-bold">
         <div class="i-carbon-user-multiple" />
         好友
+        <button
+          class="ml-2 rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:hover:border-blue-500 dark:hover:bg-gray-700"
+          :disabled="!status?.connection?.connected || refreshing"
+          @click.stop="refreshFriends"
+        >
+          {{ refreshing ? '刷新中...' : '刷新' }}
+        </button>
       </h2>
       <div v-if="friends.length" class="text-sm text-gray-500">
         <span v-if="searchKeyword.trim()">筛选 {{ filteredFriends.length }} / {{ friends.length }} 名好友</span>
