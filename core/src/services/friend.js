@@ -495,11 +495,21 @@ async function getFriendsList() {
                 } : null,
             }))
             .sort((a, b) => {
-                // 固定顺序：先按名称，再按 GID，避免刷新时顺序抖动
+                // 排序规则：偷菜 > 除草=除虫=浇水 > 名称 > GID
+                // 第一优先级：偷菜数量
+                const aSteal = a.plant?.stealNum || 0;
+                const bSteal = b.plant?.stealNum || 0;
+                if (bSteal !== aSteal) return bSteal - aSteal;
+                // 第二优先级：帮助需求总数（除草 + 除虫 + 浇水，等权重）
+                const aHelp = (a.plant?.weedNum || 0) + (a.plant?.insectNum || 0) + (a.plant?.dryNum || 0);
+                const bHelp = (b.plant?.weedNum || 0) + (b.plant?.insectNum || 0) + (b.plant?.dryNum || 0);
+                if (bHelp !== aHelp) return bHelp - aHelp;
+                // 第三优先级：按名称拼音排序
                 const an = String(a.name || '');
                 const bn = String(b.name || '');
                 const byName = an.localeCompare(bn, 'zh-CN');
                 if (byName !== 0) return byName;
+                // 第四优先级：按 GID 排序，避免刷新时顺序抖动
                 return Number(a.gid || 0) - Number(b.gid || 0);
             });
     } catch {
@@ -921,7 +931,7 @@ async function checkFriends() {
             }
         }
         
-        // 排序优化: 优先偷菜多的，其次是需要帮助多的
+        // 排序优化：优先偷菜多的，其次是需要帮助多的
         priorityFriends.sort((a, b) => {
             if (b.stealNum !== a.stealNum) return b.stealNum - a.stealNum; // 偷菜优先
             // 其次按帮助需求总数
