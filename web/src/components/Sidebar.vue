@@ -199,9 +199,11 @@ const navItems = menuRoutes.map(item => ({
 
 // QQ 号脱敏函数：中间 4 位用****代替
 function maskQQ(qq: string | number): string {
-  if (!qq) return ''
+  if (!qq)
+    return ''
   const qqStr = String(qq)
-  if (qqStr.length <= 8) return qqStr
+  if (qqStr.length <= 8)
+    return qqStr
   return `${qqStr.slice(0, 3)}****${qqStr.slice(-4)}`
 }
 
@@ -209,6 +211,23 @@ function selectAccount(acc: any) {
   accountStore.setCurrentAccount(acc)
   showAccountDropdown.value = false
 }
+
+async function toggleAccount() {
+  if (!currentAccount.value?.id)
+    return
+  // 以 Accounts.vue 的状态为准，使用 currentAccount.value.running
+  if (currentAccount.value.running) {
+    await accountStore.stopAccount(currentAccount.value.id)
+  }
+  else {
+    await accountStore.startAccount(currentAccount.value.id)
+  }
+  await accountStore.fetchAccounts()
+}
+
+const isRunning = computed(() => {
+  return currentAccount.value?.running || false
+})
 
 const version = __APP_VERSION__
 
@@ -358,6 +377,20 @@ watch(
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Quick Control -->
+    <div v-if="currentAccount?.id" class="border-b border-gray-100 px-4 py-3 dark:border-gray-700/50">
+      <button
+        class="w-full flex items-center justify-center gap-2 border rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-95"
+        :class="isRunning
+          ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-500/20 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30'
+          : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100 focus:ring-2 focus:ring-green-500/20 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30'"
+        @click="toggleAccount"
+      >
+        <div :class="isRunning ? 'i-carbon-stop-filled' : 'i-carbon-play-filled'" class="text-lg" />
+        {{ isRunning ? '停止运行' : '启动运行' }}
+      </button>
     </div>
 
     <!-- Navigation -->
