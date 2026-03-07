@@ -435,9 +435,10 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
     };
 
     // 获取作物黑名单（使用当前账号的配置）
-    // 直接使用 worker 启动时传入的内部账号 ID，而不是 GID
-    const internalAccountId = process.env.FARM_ACCOUNT_ID || '';
-    const cropBlacklist = new Set(getStealCropBlacklist(internalAccountId));
+    // 在 worker 进程中，process.env.FARM_ACCOUNT_ID 已被设置为当前游戏账号的 ID（见 worker.js 第 30-32 行）
+    // 前端保存黑名单时使用的也是这个账号 ID，所以这里直接读取即可
+    const accountId = process.env.FARM_ACCOUNT_ID || '';
+    const cropBlacklist = new Set(getStealCropBlacklist(accountId));
 
     // 统计跳过的作物
     let skippedCount = 0;
