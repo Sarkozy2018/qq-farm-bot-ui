@@ -50,9 +50,9 @@ const DEFAULT_ACCOUNT_CONFIG = {
         fertilizer_buy: false,
         free_gifts: true,
         share_reward: true,
-        vip_gift: true,
-        month_card: true,
-        open_server_gift: true,
+        vip_gift: false,
+        month_card: false,
+        open_server_gift: false,
         sell: true,
         fertilizer: 'none',
     },
@@ -61,12 +61,12 @@ const DEFAULT_ACCOUNT_CONFIG = {
     intervals: {
         farm: 2,
         friend: 10,
-        farmMin: 2,
-        farmMax: 2,
-        friendMin: 10,
-        friendMax: 10,
-        stealMin: 1,  // 偷菜间隔最小值(秒)
-        stealMax: 2,  // 偷菜间隔最大值(秒)
+        farmMin: 50,
+        farmMax: 60,
+        friendMin: 120,
+        friendMax: 180,
+        stealMin: 1,  // 偷菜间隔最小值 (秒)
+        stealMax: 2,  // 偷菜间隔最大值 (秒)
     },
     friendQuietHours: {
         enabled: false,
@@ -74,6 +74,7 @@ const DEFAULT_ACCOUNT_CONFIG = {
         end: '07:00',
     },
     friendBlacklist: [],
+    stealCropBlacklist: [],  // 偷菜作物黑名单 (seedId 列表)
 };
 const ALLOWED_AUTOMATION_KEYS = new Set(Object.keys(DEFAULT_ACCOUNT_CONFIG.automation));
 
@@ -177,6 +178,7 @@ function cloneAccountConfig(base = DEFAULT_ACCOUNT_CONFIG) {
         intervals: { ...(base.intervals || DEFAULT_ACCOUNT_CONFIG.intervals) },
         friendQuietHours: { ...(base.friendQuietHours || DEFAULT_ACCOUNT_CONFIG.friendQuietHours) },
         friendBlacklist: rawBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
+        stealCropBlacklist: Array.isArray(base.stealCropBlacklist) ? base.stealCropBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0) : [],
         plantingStrategy: ALLOWED_PLANTING_STRATEGIES.includes(String(base.plantingStrategy || ''))
             ? String(base.plantingStrategy)
             : DEFAULT_ACCOUNT_CONFIG.plantingStrategy,
@@ -236,6 +238,10 @@ function normalizeAccountConfig(input, fallback = accountFallbackConfig) {
 
     if (Array.isArray(src.friendBlacklist)) {
         cfg.friendBlacklist = src.friendBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0);
+    }
+
+    if (Array.isArray(src.stealCropBlacklist)) {
+        cfg.stealCropBlacklist = src.stealCropBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0);
     }
 
     return cfg;
@@ -387,6 +393,7 @@ function getConfigSnapshot(accountId) {
         intervals: { ...cfg.intervals },
         friendQuietHours: { ...cfg.friendQuietHours },
         friendBlacklist: [...(cfg.friendBlacklist || [])],
+        stealCropBlacklist: [...(cfg.stealCropBlacklist || [])],
         ui: { ...globalConfig.ui },
         qrLogin: normalizeQrLoginConfig(globalConfig.qrLogin),
     };
@@ -439,6 +446,10 @@ function applyConfigSnapshot(snapshot, options = {}) {
 
     if (Array.isArray(cfg.friendBlacklist)) {
         next.friendBlacklist = cfg.friendBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0);
+    }
+
+    if (Array.isArray(cfg.stealCropBlacklist)) {
+        next.stealCropBlacklist = cfg.stealCropBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0);
     }
 
     if (cfg.ui && typeof cfg.ui === 'object') {
@@ -535,6 +546,18 @@ function setFriendBlacklist(accountId, list) {
     next.friendBlacklist = Array.isArray(list) ? list.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
     setAccountConfigSnapshot(accountId, next);
     return [...next.friendBlacklist];
+}
+
+function getStealCropBlacklist(accountId) {
+    return [...(getAccountConfigSnapshot(accountId).stealCropBlacklist || [])];
+}
+
+function setStealCropBlacklist(accountId, list) {
+    const current = getAccountConfigSnapshot(accountId);
+    const next = normalizeAccountConfig(current, accountFallbackConfig);
+    next.stealCropBlacklist = Array.isArray(list) ? list.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+    setAccountConfigSnapshot(accountId, next);
+    return [...next.stealCropBlacklist];
 }
 
 function getUI() {
@@ -650,6 +673,8 @@ module.exports = {
     getFriendQuietHours,
     getFriendBlacklist,
     setFriendBlacklist,
+    getStealCropBlacklist,
+    setStealCropBlacklist,
     getUI,
     setUITheme,
     getOfflineReminder,

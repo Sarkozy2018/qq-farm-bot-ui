@@ -5,7 +5,7 @@
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
 const { parentPort } = require('node:worker_threads');
-const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getIntervals } = require('../models/store');
+const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getStealCropBlacklist } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
@@ -434,6 +434,9 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
         canPutBug: [],   // 可以放虫
     };
 
+    // 获取作物黑名单
+    const cropBlacklist = new Set(getStealCropBlacklist());
+
     for (const land of lands) {
         const id = toNum(land.id);
         const plant = land.plant;
@@ -450,10 +453,28 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
 
         if (phaseVal === PlantPhase.MATURE) {
             if (plant.stealable) {
-                result.stealable.push(id);
+                // 检查是否在黑名单中
                 const plantId = toNum(plant.id);
+                const plantCfg = getPlantById(plantId);
+                const seedId = toNum(plantCfg && plantCfg.seed_id);
+                
+                // 如果种子 ID 在黑名单中，跳过这块地
+                if (seedId > 0 && cropBlacklist.has(seedId)) {
+                    const plantName = getPlantName(plantId) || plant.name || '未知';
+                    log('好友', `黑名单过滤：跳过偷取 [${friendName || '未知'}] 的作物 [${plantName}] (种子 ID: ${seedId})`, {
+                        module: 'friend',
+                        event: 'steal_skip_blacklist',
+                        result: 'skipped',
+                        friendName,
+                        plantName,
+                        seedId,
+                    });
+                    continue;
+                }
+                
+                result.stealable.push(id);
                 const plantName = getPlantName(plantId) || plant.name || '未知';
-                result.stealableInfo.push({ landId: id, plantId, name: plantName });
+                result.stealableInfo.push({ landId: id, plantId, name: plantName, seedId });
             }
             continue;
         }
@@ -465,14 +486,14 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
         if (plant.weed_owners && plant.weed_owners.length > 0) result.needWeed.push(id);
         if (plant.insect_owners && plant.insect_owners.length > 0) result.needBug.push(id);
 
-        // 捣乱操作: 检查是否可以放草/放虫
-        // 条件: 没有草且我没放过草
+        // 捣乱操作：检查是否可以放草/放虫
+        // 条件：没有草且我没放过草
         const weedOwners = plant.weed_owners || [];
         const insectOwners = plant.insect_owners || [];
         const iAlreadyPutWeed = weedOwners.some(gid => toNum(gid) === myGid);
         const iAlreadyPutBug = insectOwners.some(gid => toNum(gid) === myGid);
 
-        // 每块地最多2个草/虫，且我没放过
+        // 每块地最多 2 个草/虫，且我没放过
         if (weedOwners.length < 2 && !iAlreadyPutWeed) {
             result.canPutWeed.push(id);
         }

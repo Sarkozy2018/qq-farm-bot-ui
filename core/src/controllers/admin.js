@@ -367,6 +367,50 @@ function startAdminServer(dataProvider) {
         res.json({ ok: true, data: saved });
     });
 
+    // API: 偷菜作物黑名单
+    app.get('/api/steal-crop-blacklist', async (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        try {
+            const list = store.getStealCropBlacklist ? store.getStealCropBlacklist(id) : [];
+            return res.json({ ok: true, data: Array.isArray(list) ? list : [] });
+        } catch (e) {
+            return handleApiError(res, e);
+        }
+    });
+
+    app.post('/api/steal-crop-blacklist/toggle', (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        
+        // 支持批量保存（前端传递 seedIds 数组）或单个切换（前端传递 seedId）
+        const body = req.body || {};
+        let next;
+        
+        if (Array.isArray(body.seedIds)) {
+            // 批量保存：直接使用前端传来的完整列表
+            next = body.seedIds.map(Number).filter(n => Number.isFinite(n) && n > 0);
+        }
+        else {
+            // 单个切换：兼容旧逻辑
+            const seedId = Number(body.seedId);
+            if (!seedId) return res.status(400).json({ ok: false, error: 'Missing seedId' });
+            const current = store.getStealCropBlacklist ? store.getStealCropBlacklist(id) : [];
+            if (current.includes(seedId)) {
+                next = current.filter(s => s !== seedId);
+            } else {
+                next = [...current, seedId];
+            }
+        }
+        
+        const saved = store.setStealCropBlacklist ? store.setStealCropBlacklist(id, next) : next;
+        // 同步配置到 worker 进程
+        if (provider && typeof provider.broadcastConfig === 'function') {
+            provider.broadcastConfig(id);
+        }
+        res.json({ ok: true, data: saved });
+    });
+
     // API: 种子列表
     app.get('/api/seeds', async (req, res) => {
         const id = getAccId(req);

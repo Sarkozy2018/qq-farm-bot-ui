@@ -29,6 +29,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Friends.vue'),
   },
   {
+    path: 'friend-patrol',
+    name: 'friendPatrol',
+    label: '好友巡查',
+    icon: 'i-carbon-search-advanced',
+    component: () => import('@/views/FriendPatrol.vue'),
+  },
+  {
     path: 'analytics',
     name: 'analytics',
     label: '分析',
