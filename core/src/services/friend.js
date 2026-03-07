@@ -435,8 +435,13 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
     };
 
     // 获取作物黑名单（使用当前账号的配置）
-    const state = getUserState();
-    const cropBlacklist = new Set(getStealCropBlacklist(state.gid));
+    // 直接使用 worker 启动时传入的内部账号 ID，而不是 GID
+    const internalAccountId = process.env.FARM_ACCOUNT_ID || '';
+    const cropBlacklist = new Set(getStealCropBlacklist(internalAccountId));
+    
+    // 统计跳过的作物
+    let skippedCount = 0;
+    const skippedPlants = [];
 
     for (const land of lands) {
         const id = toNum(land.id);
@@ -446,7 +451,7 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
             continue;
         }
 
-        const currentPhase = getCurrentPhase(plant.phases, false, `[${friendName}]土地#${id}`);
+        const currentPhase = getCurrentPhase(plant.phases, false, `[${friendName}] 土地#${id}`);
         if (!currentPhase) {
             continue;
         }
@@ -462,14 +467,8 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
                 // 如果种子 ID 在黑名单中，跳过这块地
                 if (seedId > 0 && cropBlacklist.has(seedId)) {
                     const plantName = getPlantName(plantId) || plant.name || '未知';
-                    log('好友', `黑名单过滤：跳过偷取 [${friendName || '未知'}] 的作物 [${plantName}] (种子 ID: ${seedId})`, {
-                        module: 'friend',
-                        event: 'steal_skip_blacklist',
-                        result: 'skipped',
-                        friendName,
-                        plantName,
-                        seedId,
-                    });
+                    skippedCount++;
+                    skippedPlants.push(plantName);
                     continue;
                 }
                 
@@ -502,6 +501,21 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
             result.canPutBug.push(id);
         }
     }
+    
+    // 如果有跳过的作物，输出汇总日志
+    if (skippedCount > 0) {
+        const uniquePlants = [...new Set(skippedPlants)];
+        const plantStr = uniquePlants.join('/');
+        log('好友', `跳过偷取 [${friendName || '未知'}] 的 ${skippedCount} 个作物 [${plantStr}]`, {
+            module: 'friend',
+            event: '跳过偷取',
+            result: 'skipped',
+            friendName,
+            skippedCount,
+            plants: uniquePlants,
+        });
+    }
+    
     return result;
 }
 
