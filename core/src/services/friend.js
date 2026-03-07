@@ -438,7 +438,7 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
     // 直接使用 worker 启动时传入的内部账号 ID，而不是 GID
     const internalAccountId = process.env.FARM_ACCOUNT_ID || '';
     const cropBlacklist = new Set(getStealCropBlacklist(internalAccountId));
-    
+
     // 统计跳过的作物
     let skippedCount = 0;
     const skippedPlants = [];
@@ -463,17 +463,16 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
                 const plantId = toNum(plant.id);
                 const plantCfg = getPlantById(plantId);
                 const seedId = toNum(plantCfg && plantCfg.seed_id);
+                const plantName = getPlantName(plantId) || plant.name || '未知';
                 
                 // 如果种子 ID 在黑名单中，跳过这块地
                 if (seedId > 0 && cropBlacklist.has(seedId)) {
-                    const plantName = getPlantName(plantId) || plant.name || '未知';
                     skippedCount++;
                     skippedPlants.push(plantName);
                     continue;
                 }
                 
                 result.stealable.push(id);
-                const plantName = getPlantName(plantId) || plant.name || '未知';
                 result.stealableInfo.push({ landId: id, plantId, name: plantName, seedId });
             }
             continue;
