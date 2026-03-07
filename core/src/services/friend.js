@@ -434,8 +434,9 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
         canPutBug: [],   // 可以放虫
     };
 
-    // 获取作物黑名单
-    const cropBlacklist = new Set(getStealCropBlacklist());
+    // 获取作物黑名单（使用当前账号的配置）
+    const state = getUserState();
+    const cropBlacklist = new Set(getStealCropBlacklist(state.gid));
 
     for (const land of lands) {
         const id = toNum(land.id);
