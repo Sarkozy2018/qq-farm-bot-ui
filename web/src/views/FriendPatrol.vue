@@ -20,7 +20,7 @@ const hasUnsavedChanges = ref(false)
 
 const currentAccountName = computed(() => {
   const acc = accounts.value.find((a: any) => a.id === currentAccountId.value)
-  return acc ? (acc.name || acc.nick || acc.id) : null
+  return acc ? (acc.nick || acc.name || acc.id) : null
 })
 
 const blacklistSeeds = computed(() => {
@@ -165,7 +165,7 @@ watch(currentAccountId, async () => {
           好友巡查 - 作物黑名单
         </h1>
         <p v-if="currentAccountName" class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          当前账号：{{ currentAccountName }}
+          当前账户：{{ currentAccountName }}
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -197,10 +197,10 @@ watch(currentAccountId, async () => {
         <div class="i-carbon-user-settings text-4xl text-gray-400 dark:text-gray-500" />
       </div>
       <h3 class="mt-4 text-lg text-gray-900 font-medium dark:text-gray-100">
-        需要登录账号
+        需要登录账户
       </h3>
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        请先登录账号以配置偷菜黑名单
+        请先登录账户以配置偷菜黑名单
       </p>
     </div>
 
