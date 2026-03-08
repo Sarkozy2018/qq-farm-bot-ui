@@ -144,8 +144,10 @@ async function handleOp(friendId: string, type: string, e: Event) {
   if (!currentAccountId.value)
     return
 
-  confirmAction('确定执行此操作吗?', async () => {
+  confirmAction('确定执行此操作吗？', async () => {
     await friendStore.operate(currentAccountId.value!, friendId, type)
+    // 操作完成后刷新好友列表以更新统计信息
+    await loadFriends()
   })
 }
 
