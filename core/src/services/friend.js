@@ -5,11 +5,11 @@
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
 const { parentPort } = require('node:worker_threads');
-const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getStealCropBlacklist } = require('../models/store');
+const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getAutomation } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
-const { getCurrentPhase, setOperationLimitsCallback } = require('./farm');
+const { getCurrentPhase, setOperationLimitsCallback, buildLandMap, getDisplayLandContext, isOccupiedSlaveLand } = require('./farm');
 const { createScheduler } = require('./scheduler');
 const { recordOperation } = require('./stats');
 const { sellAllFruits } = require('./warehouse');
@@ -41,6 +41,23 @@ const OP_NAMES = {
 
 let canGetHelpExp = true;
 let helpAutoDisabledByLimit = false;
+
+function normalizeStealPlantBlacklist(input) {
+    const source = Array.isArray(input) ? input : [];
+    const normalized = [];
+    for (const item of source) {
+        const value = Number.parseInt(item, 10);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        if (normalized.includes(value)) continue;
+        normalized.push(value);
+    }
+    return normalized;
+}
+
+function getStealPlantBlacklistSet() {
+    const automation = getAutomation() || {};
+    return new Set(normalizeStealPlantBlacklist(automation.friend_steal_blacklist));
+}
 
 function parseTimeToMinutes(timeStr) {
     const m = String(timeStr || '').match(/^(\d{1,2}):(\d{1,2})$/);
@@ -423,7 +440,9 @@ async function checkCanOperateRemote(friendGid, operationId) {
 
 // ============ 好友土地分析 ============
 
-function analyzeFriendLands(lands, myGid, friendName = '') {
+function analyzeFriendLands(lands, myGid, friendName = '', options = {}) {
+    const stealPlantBlacklistSet = options.stealPlantBlacklistSet instanceof Set ? options.stealPlantBlacklistSet : null;
+
     const result = {
         stealable: [],   // 可偷
         stealableInfo: [],  // 可偷植物信息 { landId, plantId, name }
@@ -434,25 +453,21 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
         canPutBug: [],   // 可以放虫
     };
 
-    // 获取作物黑名单（使用当前账号的配置）
-    // 在 worker 进程中，process.env.FARM_ACCOUNT_ID 已被设置为当前游戏账号的 ID（见 worker.js 第 30-32 行）
-    // 前端保存黑名单时使用的也是这个账号 ID，所以这里直接读取即可
-    const accountId = process.env.FARM_ACCOUNT_ID || '';
-    const cropBlacklist = new Set(getStealCropBlacklist(accountId));
-
-    // 统计跳过的作物
-    let skippedCount = 0;
-    const skippedPlants = [];
+    const landsMap = buildLandMap(lands);
 
     for (const land of lands) {
         const id = toNum(land.id);
+        if (isOccupiedSlaveLand(land, landsMap)) {
+            continue;
+        }
+
         const plant = land.plant;
 
         if (!plant || !plant.phases || plant.phases.length === 0) {
             continue;
         }
 
-        const currentPhase = getCurrentPhase(plant.phases, false, `[${friendName}] 土地#${id}`);
+        const currentPhase = getCurrentPhase(plant.phases, false, `[${friendName}]土地#${id}`);
         if (!currentPhase) {
             continue;
         }
@@ -460,21 +475,13 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
 
         if (phaseVal === PlantPhase.MATURE) {
             if (plant.stealable) {
-                // 检查是否在黑名单中
                 const plantId = toNum(plant.id);
-                const plantCfg = getPlantById(plantId);
-                const seedId = toNum(plantCfg && plantCfg.seed_id);
-                const plantName = getPlantName(plantId) || plant.name || '未知';
-                
-                // 如果种子 ID 在黑名单中，跳过这块地
-                if (seedId > 0 && cropBlacklist.has(seedId)) {
-                    skippedCount++;
-                    skippedPlants.push(plantName);
+                if (stealPlantBlacklistSet && plantId > 0 && stealPlantBlacklistSet.has(plantId)) {
                     continue;
                 }
-                
                 result.stealable.push(id);
-                result.stealableInfo.push({ landId: id, plantId, name: plantName, seedId });
+                const plantName = getPlantName(plantId) || plant.name || '未知';
+                result.stealableInfo.push({ landId: id, plantId, name: plantName });
             }
             continue;
         }
@@ -486,14 +493,14 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
         if (plant.weed_owners && plant.weed_owners.length > 0) result.needWeed.push(id);
         if (plant.insect_owners && plant.insect_owners.length > 0) result.needBug.push(id);
 
-        // 捣乱操作：检查是否可以放草/放虫
-        // 条件：没有草且我没放过草
+        // 捣乱操作: 检查是否可以放草/放虫
+        // 条件: 没有草且我没放过草
         const weedOwners = plant.weed_owners || [];
         const insectOwners = plant.insect_owners || [];
         const iAlreadyPutWeed = weedOwners.some(gid => toNum(gid) === myGid);
         const iAlreadyPutBug = insectOwners.some(gid => toNum(gid) === myGid);
 
-        // 每块地最多 2 个草/虫，且我没放过
+        // 每块地最多2个草/虫，且我没放过
         if (weedOwners.length < 2 && !iAlreadyPutWeed) {
             result.canPutWeed.push(id);
         }
@@ -501,21 +508,6 @@ function analyzeFriendLands(lands, myGid, friendName = '') {
             result.canPutBug.push(id);
         }
     }
-    
-    // 如果有跳过的作物，输出汇总日志
-    if (skippedCount > 0) {
-        const uniquePlants = [...new Set(skippedPlants)];
-        const plantStr = uniquePlants.join('/');
-        log('好友', `跳过偷取 [${friendName || '未知'}] 的 ${skippedCount} 个作物 [${plantStr}]`, {
-            module: 'friend',
-            event: '跳过偷取',
-            result: 'skipped',
-            friendName,
-            skippedCount,
-            plants: uniquePlants,
-        });
-    }
-    
     return result;
 }
 
@@ -576,10 +568,17 @@ async function getFriendLandsDetail(friendGid) {
 
         const landsList = [];
         const nowSec = getServerTimeSec();
+        const landsMap = buildLandMap(lands);
         for (const land of lands) {
             const id = toNum(land.id);
             const level = toNum(land.level);
             const unlocked = !!land.unlocked;
+            const {
+                sourceLand,
+                occupiedByMaster,
+                masterLandId,
+                occupiedLandIds,
+            } = getDisplayLandContext(land, landsMap);
             if (!unlocked) {
                 landsList.push({
                     id,
@@ -591,17 +590,43 @@ async function getFriendLandsDetail(friendGid) {
                     needWater: false,
                     needWeed: false,
                     needBug: false,
+                    occupiedByMaster: false,
+                    masterLandId: 0,
+                    occupiedLandIds: [],
+                    plantSize: 1,
                 });
                 continue;
             }
-            const plant = land.plant;
+            const plant = sourceLand && sourceLand.plant;
             if (!plant || !plant.phases || plant.phases.length === 0) {
-                landsList.push({ id, unlocked: true, status: 'empty', plantName: '', phaseName: '空地', level });
+                landsList.push({
+                    id,
+                    unlocked: true,
+                    status: 'empty',
+                    plantName: '',
+                    phaseName: '空地',
+                    level,
+                    occupiedByMaster,
+                    masterLandId,
+                    occupiedLandIds,
+                    plantSize: 1,
+                });
                 continue;
             }
             const currentPhase = getCurrentPhase(plant.phases, false, '');
             if (!currentPhase) {
-                landsList.push({ id, unlocked: true, status: 'empty', plantName: '', phaseName: '', level });
+                landsList.push({
+                    id,
+                    unlocked: true,
+                    status: 'empty',
+                    plantName: '',
+                    phaseName: '',
+                    level,
+                    occupiedByMaster,
+                    masterLandId,
+                    occupiedLandIds,
+                    plantSize: 1,
+                });
                 continue;
             }
             const phaseVal = currentPhase.phase;
@@ -610,6 +635,7 @@ async function getFriendLandsDetail(friendGid) {
             const plantCfg = getPlantById(plantId);
             const seedId = toNum(plantCfg && plantCfg.seed_id);
             const seedImage = seedId > 0 ? getSeedImageBySeedId(seedId) : '';
+            const plantSize = Math.max(1, toNum(plantCfg && plantCfg.size) || 1);
             const phaseName = PHASE_NAMES[phaseVal] || '';
             const maturePhase = Array.isArray(plant.phases)
                 ? plant.phases.find((p) => p && toNum(p.phase) === PlantPhase.MATURE)
@@ -633,6 +659,10 @@ async function getFriendLandsDetail(friendGid) {
                 needWater: toNum(plant.dry_num) > 0,
                 needWeed: (plant.weed_owners && plant.weed_owners.length > 0),
                 needBug: (plant.insect_owners && plant.insect_owners.length > 0),
+                occupiedByMaster,
+                masterLandId,
+                occupiedLandIds,
+                plantSize,
             });
         }
 
@@ -786,7 +816,7 @@ async function doFriendOperation(friendGid, opType) {
 
 // ============ 拜访好友 ============
 
-async function visitFriend(friend, totalActions, myGid) {
+async function visitFriend(friend, totalActions, myGid, options = {}) {
     const { gid, name } = friend;
 
     let enterReply;
@@ -809,7 +839,7 @@ async function visitFriend(friend, totalActions, myGid) {
         return;
     }
 
-    const status = analyzeFriendLands(lands, myGid, name);
+    const status = analyzeFriendLands(lands, myGid, name, options);
 
     // 执行操作
     const actions = [];
@@ -955,7 +985,7 @@ async function checkFriends() {
             if (visitedGids.has(gid)) continue;
             if (blacklist.has(gid)) continue;
             if (String(f.name || '').trim() === '小小农夫' || String(f.remark || '').trim() === '小小农夫') continue;
-
+            
             const name = f.remark || f.name || `GID:${gid}`;
             const p = f.plant;
             const stealNum = p ? toNum(p.steal_plant_num) : 0;
@@ -977,7 +1007,7 @@ async function checkFriends() {
             }
         }
         
-        // 排序优化：优先偷菜多的，其次是需要帮助多的
+        // 排序优化: 优先偷菜多的，其次是需要帮助多的
         priorityFriends.sort((a, b) => {
             if (b.stealNum !== a.stealNum) return b.stealNum - a.stealNum; // 偷菜优先
             // 其次按帮助需求总数
@@ -993,6 +1023,7 @@ async function checkFriends() {
         }
 
         const totalActions = { steal: 0, water: 0, weed: 0, bug: 0, putBug: 0, putWeed: 0 };
+        const stealPlantBlacklistSet = getStealPlantBlacklistSet();
 
         for (let i = 0; i < friendsToVisit.length; i++) {
             const friend = friendsToVisit[i];
@@ -1003,7 +1034,7 @@ async function checkFriends() {
             }
 
             try {
-                await visitFriend(friend, totalActions, state.gid);
+                await visitFriend(friend, totalActions, state.gid, { stealPlantBlacklistSet });
             } catch {
                 // 单个好友访问失败不影响整体
             }
