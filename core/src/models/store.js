@@ -618,18 +618,6 @@ function setFriendBlacklist(accountId, list) {
     return [...next.friendBlacklist];
 }
 
-function getStealCropBlacklist(accountId) {
-    return [...(getAccountConfigSnapshot(accountId).stealCropBlacklist || [])];
-}
-
-function setStealCropBlacklist(accountId, list) {
-    const current = getAccountConfigSnapshot(accountId);
-    const next = normalizeAccountConfig(current, accountFallbackConfig);
-    next.stealCropBlacklist = Array.isArray(list) ? list.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
-    setAccountConfigSnapshot(accountId, next);
-    return [...next.stealCropBlacklist];
-}
-
 function getUI() {
     return { ...globalConfig.ui };
 }
@@ -743,8 +731,6 @@ module.exports = {
     getFriendQuietHours,
     getFriendBlacklist,
     setFriendBlacklist,
-    getStealCropBlacklist,
-    setStealCropBlacklist,
     getUI,
     setUITheme,
     getOfflineReminder,
