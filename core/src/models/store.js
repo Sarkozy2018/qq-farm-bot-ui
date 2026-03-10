@@ -8,7 +8,7 @@ const { readTextFile, readJsonFile, writeJsonFileAtomic } = require('../services
 
 const STORE_FILE = getDataFile('store.json');
 const ACCOUNTS_FILE = getDataFile('accounts.json');
-const ALLOWED_PLANTING_STRATEGIES = ['preferred', 'level', 'max_exp', 'max_fert_exp', 'max_profit', 'max_fert_profit'];
+const ALLOWED_PLANTING_STRATEGIES = ['preferred', 'level', 'max_exp', 'max_fert_exp', 'max_profit', 'max_fert_profit', 'bag_priority'];
 const PUSHOO_CHANNELS = new Set([
     'webhook', 'qmsg', 'serverchan', 'pushplus', 'pushplushxtrip',
     'dingtalk', 'wecom', 'bark', 'gocqhttp', 'onebot', 'atri',
@@ -69,6 +69,7 @@ const DEFAULT_ACCOUNT_CONFIG = {
     },
     plantingStrategy: 'preferred',
     preferredSeedId: 0,
+    bagSeedPriority: [],
     intervals: {
         farm: 2,
         friend: 10,
@@ -213,6 +214,18 @@ function normalizeStealPlantBlacklist(input, fallback = DEFAULT_STEAL_PLANT_BLAC
     return normalized;
 }
 
+function normalizeBagSeedPriority(input) {
+    if (!Array.isArray(input)) return [];
+    const normalized = [];
+    for (const item of input) {
+        const value = Number.parseInt(item, 10);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        if (normalized.includes(value)) continue;
+        normalized.push(value);
+    }
+    return normalized;
+}
+
 function cloneAccountConfig(base = DEFAULT_ACCOUNT_CONFIG) {
     const srcAutomation = (base && base.automation && typeof base.automation === 'object')
         ? base.automation
@@ -242,6 +255,7 @@ function cloneAccountConfig(base = DEFAULT_ACCOUNT_CONFIG) {
             ? String(base.plantingStrategy)
             : DEFAULT_ACCOUNT_CONFIG.plantingStrategy,
         preferredSeedId: Math.max(0, Number.parseInt(base.preferredSeedId, 10) || 0),
+        bagSeedPriority: normalizeBagSeedPriority(base.bagSeedPriority),
     };
 }
 
@@ -278,6 +292,10 @@ function normalizeAccountConfig(input, fallback = accountFallbackConfig) {
 
     if (src.preferredSeedId !== undefined && src.preferredSeedId !== null) {
         cfg.preferredSeedId = Math.max(0, Number.parseInt(src.preferredSeedId, 10) || 0);
+    }
+
+    if (src.bagSeedPriority !== undefined) {
+        cfg.bagSeedPriority = normalizeBagSeedPriority(src.bagSeedPriority);
     }
 
     if (src.intervals && typeof src.intervals === 'object') {
@@ -497,6 +515,10 @@ function applyConfigSnapshot(snapshot, options = {}) {
         next.preferredSeedId = Math.max(0, Number.parseInt(cfg.preferredSeedId, 10) || 0);
     }
 
+    if (cfg.bagSeedPriority !== undefined) {
+        next.bagSeedPriority = normalizeBagSeedPriority(cfg.bagSeedPriority);
+    }
+
     if (cfg.intervals && typeof cfg.intervals === 'object') {
         for (const [type, sec] of Object.entries(cfg.intervals)) {
             if (next.intervals[type] === undefined) continue;
@@ -548,6 +570,16 @@ function getPreferredSeed(accountId) {
 
 function getPlantingStrategy(accountId) {
     return getAccountConfigSnapshot(accountId).plantingStrategy;
+}
+
+function getBagSeedPriority(accountId) {
+    return [...(getAccountConfigSnapshot(accountId).bagSeedPriority || [])];
+}
+
+function setPlantingStrategy(accountId, strategy) {
+    if (!ALLOWED_PLANTING_STRATEGIES.includes(strategy)) return false;
+    applyConfigSnapshot({ plantingStrategy: strategy }, { accountId });
+    return true;
 }
 
 function getIntervals(accountId) {
@@ -727,6 +759,8 @@ module.exports = {
     isAutomationOn,
     getPreferredSeed,
     getPlantingStrategy,
+    getBagSeedPriority,
+    setPlantingStrategy,
     getIntervals,
     getFriendQuietHours,
     getFriendBlacklist,
