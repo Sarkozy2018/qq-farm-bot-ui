@@ -797,6 +797,8 @@ function startAdminServer(dataProvider) {
             }
 
             const incomingCode = String(payload.code || '').trim();
+            const oldCode = oldAccount ? String(oldAccount.code || '').trim() : '';
+            const codeChanged = incomingCode && incomingCode !== oldCode;
             const manualPlatform = String(payload.platform || (oldAccount && oldAccount.platform) || 'qq').trim().toLowerCase();
             if (incomingCode) {
                 try {
@@ -842,6 +844,15 @@ function startAdminServer(dataProvider) {
             if (!isUpdate) {
                 const newAcc = data.accounts[data.accounts.length - 1];
                 if (newAcc) provider.startAccount(newAcc.id);
+            } else if (codeChanged) {
+                // code 更新时，根据运行状态决定重启或启动
+                if (wasRunning) {
+                    // 之前在运行，重启
+                    provider.restartAccount(payload.id);
+                } else {
+                    // 之前未运行，启动
+                    provider.startAccount(payload.id);
+                }
             } else if (wasRunning && !onlyRemarkChanged) {
                 // 如果是更新，且之前在运行，且不是仅修改备注，则重启
                 provider.restartAccount(payload.id);
