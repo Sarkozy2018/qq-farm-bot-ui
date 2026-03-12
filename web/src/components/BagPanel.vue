@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { useBagStore } from '@/stores/bag'
 import { useStatusStore } from '@/stores/status'
@@ -11,10 +11,27 @@ const bagStore = useBagStore()
 const statusStore = useStatusStore()
 
 const { currentAccountId, currentAccount } = storeToRefs(accountStore)
-const { items, loading: bagLoading } = storeToRefs(bagStore)
+const { items, itemsByType, loading: bagLoading } = storeToRefs(bagStore)
 const { status, loading: statusLoading, error: statusError, realtimeConnected } = storeToRefs(statusStore)
 
 const imageErrors = ref<Record<string | number, boolean>>({})
+const activeTab = ref<'all' | 'seeds' | 'fruits' | 'superFruits' | 'others'>('all')
+
+// 根据当前选中的标签页返回对应的物品
+const displayItems = computed(() => {
+  switch (activeTab.value) {
+    case 'seeds':
+      return itemsByType.value.seeds
+    case 'fruits':
+      return itemsByType.value.fruits
+    case 'superFruits':
+      return itemsByType.value.superFruits
+    case 'others':
+      return itemsByType.value.others
+    default:
+      return items.value
+  }
+})
 
 function getPriceClass(item: any) {
   const priceId = Number(item?.priceId || 0)
@@ -62,6 +79,10 @@ useIntervalFn(loadBag, 60000)
       </h2>
       <div v-if="items.length" class="text-sm text-gray-500">
         共 {{ items.length }} 种物品
+        <span v-if="itemsByType.seeds.length"> · 种子 {{ itemsByType.seeds.length }}</span>
+        <span v-if="itemsByType.fruits.length"> · 果实 {{ itemsByType.fruits.length }}</span>
+        <span v-if="itemsByType.superFruits.length"> · 超变果实 {{ itemsByType.superFruits.length }}</span>
+        <span v-if="itemsByType.others.length"> · 其他 {{ itemsByType.others.length }}</span>
       </div>
     </div>
 
@@ -98,48 +119,112 @@ useIntervalFn(loadBag, 60000)
       无可展示物品
     </div>
 
-    <div v-else class="grid grid-cols-2 gap-4 lg:grid-cols-5 md:grid-cols-4 sm:grid-cols-3 xl:grid-cols-6">
-      <div
-        v-for="item in items"
-        :key="item.id"
-        class="group relative flex flex-col items-center border rounded-lg bg-white p-3 transition dark:border-gray-700 dark:bg-gray-800 hover:shadow-md"
-      >
-        <div class="absolute left-2 top-2 text-xs text-gray-400 font-mono">
-          #{{ item.id }}
-        </div>
-
-        <div
-          class="thumb-wrap mb-2 mt-6 h-16 w-16 flex items-center justify-center rounded-full bg-gray-50 dark:bg-gray-700/50"
-          :data-fallback="(item.name || '物').slice(0, 1)"
-        >
-          <img
-            v-if="item.image && !imageErrors[item.id]"
-            :src="item.image"
-            :alt="item.name"
-            class="max-h-full max-w-full object-contain"
-            loading="lazy"
-            @error="imageErrors[item.id] = true"
+    <div v-else class="space-y-4">
+      <!-- 分类标签页 -->
+      <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+        <div class="flex flex-wrap gap-2">
+          <button
+            @click="activeTab = 'all'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            :class="[
+              activeTab === 'all'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+            ]"
           >
-          <div v-else class="text-2xl text-gray-400 font-bold uppercase">
-            {{ (item.name || '物').slice(0, 1) }}
+            全部 {{ items.length }}
+          </button>
+          <button
+            @click="activeTab = 'seeds'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            :class="[
+              activeTab === 'seeds'
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+            ]"
+          >
+            种子 {{ itemsByType.seeds.length }}
+          </button>
+          <button
+            @click="activeTab = 'fruits'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            :class="[
+              activeTab === 'fruits'
+                ? 'bg-amber-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+            ]"
+          >
+            果实 {{ itemsByType.fruits.length }}
+          </button>
+          <button
+            @click="activeTab = 'superFruits'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            :class="[
+              activeTab === 'superFruits'
+                ? 'bg-purple-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+            ]"
+          >
+            超变果实 {{ itemsByType.superFruits.length }}
+          </button>
+          <button
+            @click="activeTab = 'others'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            :class="[
+              activeTab === 'others'
+                ? 'bg-gray-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+            ]"
+          >
+            其他 {{ itemsByType.others.length }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 物品网格 -->
+      <div class="grid grid-cols-2 gap-4 lg:grid-cols-5 md:grid-cols-4 sm:grid-cols-3 xl:grid-cols-6">
+        <div
+          v-for="item in displayItems"
+          :key="item.id"
+          class="group relative flex flex-col items-center border rounded-lg p-3 transition cursor-pointer border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 hover:shadow-md"
+        >
+          <div class="absolute left-2 top-2 text-xs text-gray-400 font-mono">
+            #{{ item.id }}
           </div>
-        </div>
 
-        <div class="mb-1 w-full truncate px-2 text-center text-sm font-bold" :title="item.name">
-          {{ item.name || `物品${item.id}` }}
-        </div>
+          <div
+            class="thumb-wrap mb-2 mt-6 h-16 w-16 flex items-center justify-center rounded-full bg-gray-50 dark:bg-gray-700/50"
+            :data-fallback="(item.name || '物').slice(0, 1)"
+          >
+            <img
+              v-if="item.image && !imageErrors[item.id]"
+              :src="item.image"
+              :alt="item.name"
+              class="max-h-full max-w-full object-contain"
+              loading="lazy"
+              @error="imageErrors[item.id] = true"
+            >
+            <div v-else class="text-2xl text-gray-400 font-bold uppercase">
+              {{ (item.name || '物').slice(0, 1) }}
+            </div>
+          </div>
 
-        <div class="mb-2 flex flex-col items-center gap-0.5 text-xs text-gray-400">
-          <span v-if="item.uid">UID: {{ item.uid }}</span>
-          <span>
-            类型: {{ item.itemType || 0 }}
-            <span v-if="item.level > 0"> · Lv{{ item.level }}</span>
-            <span v-if="item.price > 0" :class="getPriceClass(item)"> · {{ item.price }}{{ item.priceUnit || '金' }}</span>
-          </span>
-        </div>
+          <div class="mb-1 w-full truncate px-2 text-center text-sm font-bold" :title="item.name">
+            {{ item.name || `物品${item.id}` }}
+          </div>
 
-        <div class="mt-auto font-medium" :class="item.hoursText ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'">
-          {{ item.hoursText || `x${item.count || 0}` }}
+          <div class="mb-2 flex flex-col items-center gap-0.5 text-xs text-gray-400">
+            <span v-if="item.uid">UID: {{ item.uid }}</span>
+            <span>
+              类型: {{ item.itemType || 0 }}
+              <span v-if="item.level > 0"> · Lv{{ item.level }}</span>
+              <span v-if="item.price > 0" :class="getPriceClass(item)"> · {{ item.price }}{{ item.priceUnit || '金' }}</span>
+            </span>
+          </div>
+
+          <div class="mt-auto font-medium" :class="item.hoursText ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'">
+            {{ item.hoursText || `x${item.count || 0}` }}
+          </div>
         </div>
       </div>
     </div>
