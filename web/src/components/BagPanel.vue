@@ -1,21 +1,25 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { onMounted, ref, computed, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { useBagStore } from '@/stores/bag'
 import { useStatusStore } from '@/stores/status'
+import { useToastStore } from '@/stores/toast'
 
 const accountStore = useAccountStore()
 const bagStore = useBagStore()
 const statusStore = useStatusStore()
+const toastStore = useToastStore()
 
 const { currentAccountId, currentAccount } = storeToRefs(accountStore)
-const { items, itemsByType, loading: bagLoading } = storeToRefs(bagStore)
+const { items, itemsByType, loading: bagLoading, originItems } = storeToRefs(bagStore)
 const { status, loading: statusLoading, error: statusError, realtimeConnected } = storeToRefs(statusStore)
 
 const imageErrors = ref<Record<string | number, boolean>>({})
 const activeTab = ref<'all' | 'seeds' | 'fruits' | 'superFruits' | 'others'>('all')
+const selectedItems = ref<Map<number | string, any>>(new Map())
+const isSelling = ref(false)
 
 // 根据当前选中的标签页返回对应的物品
 const displayItems = computed(() => {
@@ -32,6 +36,74 @@ const displayItems = computed(() => {
       return items.value
   }
 })
+
+const selectedCount = computed(() => selectedItems.value.size)
+
+const totalSelectedValue = computed(() => {
+  let total = 0
+  selectedItems.value.forEach((item) => {
+    const price = Number(item.price || 0)
+    const count = Number(item.count || 0)
+    total += price * count
+  })
+  return total
+})
+
+function toggleItemSelection(item: any) {
+  const key = item.id
+  if (selectedItems.value.has(key)) {
+    selectedItems.value.delete(key)
+  }
+  else {
+    selectedItems.value.set(key, item)
+  }
+}
+
+function selectAll() {
+  displayItems.value.forEach((item) => {
+    selectedItems.value.set(item.id, item)
+  })
+}
+
+function clearSelection() {
+  selectedItems.value.clear()
+}
+
+async function handleSellSelected() {
+  if (!currentAccountId.value || selectedItems.value.size === 0)
+    return
+
+  // 根据选中物品的 id匹配 originItems 中的原始物品
+  const itemsToSell = []
+  for (const selectedItem of selectedItems.value.values()) {
+    const matchedOriginItems = originItems.value?.filter(
+      originItem => originItem.id === selectedItem.id,
+    )
+    if (matchedOriginItems && matchedOriginItems.length > 0) {
+      // 将所有匹配的原始物品都加入出售列表
+      itemsToSell.push(...matchedOriginItems)
+    }
+  }
+
+  isSelling.value = true
+  try {
+    const result = await bagStore.sellItems(currentAccountId.value, itemsToSell)
+    if (result.ok) {
+      toastStore.success(`成功出售 ${selectedItems.value.size} 种物品，获得 ${result.data?.gain || 0} 金币`)
+      clearSelection()
+      await loadBag()
+    }
+    else {
+      toastStore.error(result.error || '出售失败')
+    }
+  }
+  catch (e) {
+    toastStore.error(e instanceof Error ? e.message : '出售失败')
+  }
+  finally {
+    isSelling.value = false
+  }
+}
 
 function getPriceClass(item: any) {
   const priceId = Number(item?.priceId || 0)
@@ -86,6 +158,35 @@ useIntervalFn(loadBag, 60000)
       </div>
     </div>
 
+    <!-- 多选操作栏 -->
+    <div v-if="selectedCount > 0" class="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium text-blue-700 dark:text-blue-300">
+            已选择 {{ selectedCount }} 种物品
+          </span>
+          <span class="text-xs text-blue-600 dark:text-blue-400">
+            总价值：{{ totalSelectedValue }} 金
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="clearSelection"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
+          >
+            取消选择
+          </button>
+          <button
+            @click="handleSellSelected"
+            :disabled="isSelling || selectedCount === 0"
+            class="px-4 py-1.5 text-xs font-medium rounded-md transition bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isSelling ? '出售中...' : `出售 (${selectedCount})` }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="bagLoading || statusLoading" class="flex justify-center py-12">
       <div class="i-svg-spinners-90-ring-with-bg text-4xl text-blue-500" />
     </div>
@@ -121,7 +222,7 @@ useIntervalFn(loadBag, 60000)
 
     <div v-else class="space-y-4">
       <!-- 分类标签页 -->
-      <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
         <div class="flex flex-wrap gap-2">
           <button
             @click="activeTab = 'all'"
@@ -179,6 +280,20 @@ useIntervalFn(loadBag, 60000)
             其他 {{ itemsByType.others.length }}
           </button>
         </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="selectAll"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-300"
+          >
+            全选
+          </button>
+          <button
+            @click="clearSelection"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
+          >
+            取消全选
+          </button>
+        </div>
       </div>
 
       <!-- 物品网格 -->
@@ -186,9 +301,30 @@ useIntervalFn(loadBag, 60000)
         <div
           v-for="item in displayItems"
           :key="item.id"
+          @click="toggleItemSelection(item)"
           class="group relative flex flex-col items-center border rounded-lg p-3 transition cursor-pointer border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 hover:shadow-md"
+          :class="[
+            selectedItems.has(item.id)
+              ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/30'
+              : 'border-gray-200 bg-white',
+          ]"
         >
-          <div class="absolute left-2 top-2 text-xs text-gray-400 font-mono">
+          <!-- 选择标记 -->
+          <div
+            class="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 transition"
+            :class="[
+              selectedItems.has(item.id)
+                ? 'border-blue-500 bg-blue-500 text-white'
+                : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700',
+            ]"
+          >
+            <div
+              v-if="selectedItems.has(item.id)"
+              class="i-carbon-checkmark text-sm"
+            />
+          </div>
+
+          <div class="absolute right-2 top-2 text-xs text-gray-400 font-mono">
             #{{ item.id }}
           </div>
 

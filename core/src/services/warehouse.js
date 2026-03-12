@@ -318,6 +318,14 @@ async function getCurrentTotalsFromBag() {
 async function getBagDetail() {
     const bagReply = await getBag();
     const rawItems = getBagItems(bagReply);
+    
+    // 构造原始物品列表（包含 id/count/uid）
+    const originItems = (rawItems || []).map(it => ({
+        id: toNum(it.id),
+        count: toNum(it.count),
+        uid: toNum(it.uid),
+    })).filter(it => it.id > 0 && it.count > 0);
+    
     const merged = new Map();
     for (const it of (rawItems || [])) {
         const id = toNum(it.id);
@@ -393,7 +401,7 @@ async function getBagDetail() {
         if (cb !== ca) return cb - ca;
         return Number(a.id || 0) - Number(b.id || 0);
     });
-    return { totalKinds: items.length, items };
+    return { totalKinds: items.length, items, originItems };
 }
 
 /**
@@ -576,4 +584,5 @@ module.exports = {
     getBagItems,
     getCurrentContainerHours,
     getCurrentTotalsFromBag,
+    getGoldFromItems,
 };

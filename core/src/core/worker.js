@@ -675,6 +675,14 @@ async function handleApiCall(msg) {
             case 'getBagSeeds':
                 result = await require('../services/warehouse').getBagSeeds();
                 break;
+            case 'sellBagItems': {
+                const itemsToSell = args && Array.isArray(args[0]) ? args[0] : [];
+                const warehouse = require('../services/warehouse');
+                const reply = await warehouse.sellItems(itemsToSell);
+                const gain = warehouse.getGoldFromItems((reply && reply.get_items) || []);
+                result = { success: true, gain, reply };
+                break;
+            }
             case 'setAutomation': {
                 const payload = args && args[0] ? args[0] : {};
                 applyRuntimeConfig({ automation: { [payload.key]: payload.value } }, true);
