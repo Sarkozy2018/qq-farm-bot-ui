@@ -79,6 +79,30 @@ function selectAccount(account: any) {
   accountStore.selectAccount(String(account.id))
 }
 
+function getAccountAvatar(account: any) {
+  const avatar = String(account?.avatar || account?.avatarUrl || '').trim()
+  if (avatar)
+    return avatar
+
+  const uin = String(account?.uin || account?.qq || '').trim()
+  if (uin)
+    return `https://q1.qlogo.cn/g?b=qq&nk=${uin}&s=100`
+
+  return ''
+}
+
+function getAccountBindingText(account: any) {
+  const uin = String(account?.uin || account?.qq || '').trim()
+  if (uin)
+    return uin
+
+  const gid = String(account?.gid || '').trim()
+  if (gid)
+    return `GID:${gid}`
+
+  return '未同步'
+}
+
 // QQ 号脱敏函数：中间 4 位用****代替
 function maskQQ(qq: string | number): string {
   if (!qq)
@@ -136,7 +160,7 @@ function maskQQ(qq: string | number): string {
         <div class="mb-4 flex items-start justify-between">
           <div class="flex items-center gap-3">
             <div class="h-12 w-12 flex items-center justify-center overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-              <img v-if="acc.uin" :src="`https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=100`" class="h-full w-full object-cover">
+              <img v-if="getAccountAvatar(acc)" :src="getAccountAvatar(acc)" class="h-full w-full object-cover">
               <div v-else class="i-carbon-user text-2xl text-gray-400" />
             </div>
             <div>
@@ -152,7 +176,7 @@ function maskQQ(qq: string | number): string {
                   {{ getPlatformLabel(acc.platform) }}
                 </span>
                 <span class="text-sm text-gray-500">
-                  {{ acc.uin ? maskQQ(acc.uin) : '未绑定' }}
+                  {{ acc.uin ? maskQQ(acc.uin) : getAccountBindingText(acc) }}
                 </span>
               </div>
             </div>
