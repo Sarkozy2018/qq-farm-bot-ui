@@ -83,6 +83,8 @@ const DEFAULT_ACCOUNT_CONFIG = {
         fertilizer: 'none',
         fertilizer_multi_season: false,
         fertilizer_land_types: [...DEFAULT_FERTILIZER_LAND_TYPES],
+        smart_ripen: false,
+        smart_ripen_threshold: 120,
     },
     plantingStrategy: 'preferred',
     preferredSeedId: 0,
@@ -463,6 +465,11 @@ function normalizeAccountConfig(input, fallback = accountFallbackConfig) {
                 cfg.automation[k] = normalizeFertilizerLandTypes(v, cfg.automation[k]);
             } else if (k === 'friend_steal_blacklist') {
                 cfg.automation[k] = normalizeStealPlantBlacklist(v, cfg.automation[k]);
+            } else if (k === 'smart_ripen_threshold') {
+                const n = Number(v);
+                cfg.automation[k] = (Number.isFinite(n) && n >= 5 && n <= 1800) ? Math.floor(n) : cfg.automation[k];
+            } else if (k === 'smart_ripen') {
+                cfg.automation[k] = !!v;
             } else {
                 cfg.automation[k] = !!v;
             }
@@ -732,6 +739,11 @@ function applyConfigSnapshot(snapshot, options = {}) {
                 next.automation[k] = normalizeFertilizerLandTypes(v, next.automation[k]);
             } else if (k === 'friend_steal_blacklist') {
                 next.automation[k] = normalizeStealPlantBlacklist(v, next.automation[k]);
+            } else if (k === 'smart_ripen_threshold') {
+                const n = Number(v);
+                next.automation[k] = (Number.isFinite(n) && n >= 5 && n <= 1800) ? Math.floor(n) : next.automation[k];
+            } else if (k === 'smart_ripen') {
+                next.automation[k] = !!v;
             } else {
                 next.automation[k] = !!v;
             }

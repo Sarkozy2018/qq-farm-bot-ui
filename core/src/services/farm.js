@@ -1325,11 +1325,17 @@ function analyzeLands(lands) {
         harvestable: [], needWater: [], needWeed: [], needBug: [],
         growing: [], empty: [], dead: [], unlockable: [], upgradable: [],
         harvestableInfo: [],
+        smartRipen: [], // 智能催熟待处理列表
     };
 
     const nowSec = getServerTimeSec();
     const debug = isFirstFarmCheck;
     const landsMap = buildLandMap(lands);
+    
+    // 获取智能催熟配置
+    const automation = getAutomation() || {};
+    const smartRipenEnabled = !!automation.smart_ripen;
+    const smartRipenThreshold = Math.max(5, Math.min(1800, Number(automation.smart_ripen_threshold) || 120));
 
     for (const land of lands) {
         const id = toNum(land.id);
@@ -1380,6 +1386,25 @@ function analyzeLands(lands) {
                 exp: plantExp,
             });
             continue;
+        }
+
+        // 智能催熟判断：检查作物是否即将成熟（剩余两个阶段或以上，且下个阶段是成熟期）
+        if (smartRipenEnabled && plant.phases.length >= 2 && toNum(plant.phases[1].phase) === PlantPhase.MATURE) {
+            const maturePhase = plant.phases.find((p) => p && toNum(p.phase) === PlantPhase.MATURE);
+            if (maturePhase) {
+
+                const matureBegin = toTimeSec(maturePhase.begin_time);
+                const matureInSec = matureBegin > nowSec ? (matureBegin - nowSec) : 0;
+                // 如果成熟时间小于阈值，加入智能催熟列表
+                if (matureInSec > 0 && matureInSec <= smartRipenThreshold) {
+                    result.smartRipen.push({
+                        landId: id,
+                        matureInSec,
+                        plantId: toNum(plant.id),
+                        plantName,
+                    });
+                }
+            }
         }
 
         const dryNum = toNum(plant.dry_num);
@@ -1545,6 +1570,7 @@ async function runFarmOperation(opType, options = {}) {
     if (status.empty.length) statusParts.push(`空:${status.empty.length}`);
     if (status.unlockable.length) statusParts.push(`解:${status.unlockable.length}`);
     if (status.upgradable.length) statusParts.push(`升:${status.upgradable.length}`);
+    if (status.smartRipen && status.smartRipen.length > 0) statusParts.push(`催:${status.smartRipen.length}`);
     statusParts.push(`长:${status.growing.length}`);
 
     const actions = [];
@@ -1629,36 +1655,111 @@ async function runFarmOperation(opType, options = {}) {
         }
     }
 
-    // 执行收获
+    // 执行智能催熟：施有机肥 + 延时 150ms + 收获
     let harvestedLandIds = [];
     let harvestReply = null;
     let postHarvest = null;
-    if (opType === 'all' || opType === 'harvest') {
-        if (status.harvestable.length > 0) {
-            try {
-                harvestReply = await harvest(status.harvestable);
-                log('收获', `收获完成 ${status.harvestable.length} 块土地`, {
-                    module: 'farm',
-                    event: 'harvest_crop',
-                    result: 'ok',
-                    count: status.harvestable.length,
-                    landIds: [...status.harvestable],
-                });
-                actions.push(`收获${status.harvestable.length}`);
-                recordOperation('harvest', status.harvestable.length);
-                harvestedLandIds = [...status.harvestable];
-                networkEvents.emit('farmHarvested', {
-                    count: status.harvestable.length,
-                    landIds: [...status.harvestable],
-                    opType,
-                });
-            } catch (e) {
-                logWarn('收获', e.message, {
-                    module: 'farm',
-                    event: 'harvest_crop',
-                    result: 'error',
-                });
+    
+    if (opType === 'all' && status.smartRipen && status.smartRipen.length > 0) {
+        const smartRipenLandIds = status.smartRipen.map(item => item.landId);
+        try {
+            // 施有机肥
+            let fertilizedCount = 0;
+            for (const landId of smartRipenLandIds) {
+                try {
+                    const body = types.FertilizeRequest.encode(types.FertilizeRequest.create({
+                        land_ids: [toLong(landId)],
+                        fertilizer_id: toLong(ORGANIC_FERTILIZER_ID),
+                    })).finish();
+                    await sendMsgAsync('gamepb.plantpb.PlantService', 'Fertilize', body);
+                    fertilizedCount++;
+                } catch (fertErr) {
+                    logWarn('智能催熟', `土地#${landId} 施有机肥失败：${fertErr.message}`, {
+                        module: 'farm',
+                        event: '智能催熟',
+                        result: 'error',
+                        landId,
+                    });
+                }
+                // 施肥延时 150-200 毫秒
+                await sleep(150 + Math.floor(Math.random() * 50));
             }
+            
+            if (fertilizedCount > 0) {
+                log('智能催肥', `已为 ${fertilizedCount} 块地施有机肥并等待收获 (${smartRipenLandIds.join(',')})`, {
+                    module: 'farm',
+                    event: '智能催肥',
+                    result: 'ok',
+                    count: fertilizedCount,
+                    landIds: smartRipenLandIds,
+                });
+                actions.push(`催肥${fertilizedCount}`);
+                recordOperation('fertilize', fertilizedCount);
+            }
+
+            // 收获延时 400-1000 毫秒
+            await sleep(400 + Math.floor(Math.random() * 600));
+            
+            // 立即收获（包括原本可收获的和刚催熟的）
+            const allHarvestable = [...new Set([...status.harvestable, ...smartRipenLandIds])];
+            if (allHarvestable.length > 0) {
+                try {
+                    harvestReply = await harvest(allHarvestable);
+                    log('智能催熟', `收获完成 ${allHarvestable.length} 块土地`, {
+                        module: 'farm',
+                        event: '智能催熟',
+                        result: 'ok',
+                        count: allHarvestable.length,
+                        landIds: allHarvestable,
+                    });
+                    actions.push(`收获${allHarvestable.length}`);
+                    recordOperation('harvest', allHarvestable.length);
+                    harvestedLandIds = allHarvestable;
+                    networkEvents.emit('farmHarvested', {
+                        count: allHarvestable.length,
+                        landIds: allHarvestable,
+                        opType,
+                    });
+                } catch (e) {
+                    logWarn('智能催熟', `收获失败：${e.message}`, {
+                        module: 'farm',
+                        event: '智能催熟',
+                        result: 'error',
+                    });
+                }
+            }
+        } catch (e) {
+            logWarn('智能催熟', `处理失败：${e.message}`, {
+                module: 'farm',
+                event: 'smart_ripen_process',
+                result: 'error',
+            });
+        }
+    } else if ((opType === 'all' || opType === 'harvest') && status.harvestable.length > 0) {
+        // 普通收获逻辑（没有智能催熟时）
+        try {
+            harvestReply = await harvest(status.harvestable);
+            log('收获', `收获完成 ${status.harvestable.length} 块土地`, {
+                module: 'farm',
+                event: 'harvest_crop',
+                result: 'ok',
+                count: status.harvestable.length,
+                landIds: [...status.harvestable],
+            });
+            actions.push(`收获${status.harvestable.length}`);
+            recordOperation('harvest', status.harvestable.length);
+            harvestedLandIds = [...status.harvestable];
+            networkEvents.emit('farmHarvested', {
+                count: status.harvestable.length,
+                landIds: [...status.harvestable],
+                opType,
+            });
+        } catch (e) {
+            logWarn('收获', e.message, {
+                module: 'farm',
+                event: 'harvest_crop',
+                result: 'error',
+            });
         }
     }
 

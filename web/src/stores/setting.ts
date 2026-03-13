@@ -28,6 +28,8 @@ export interface AutomationConfig {
   fertilizer?: FertilizerMode
   fertilizer_multi_season?: boolean
   fertilizer_land_types?: string[]
+  smart_ripen?: boolean
+  smart_ripen_threshold?: number
   friend_steal?: boolean
   friend_steal_blacklist?: number[]
   friend_help?: boolean

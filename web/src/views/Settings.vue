@@ -152,6 +152,8 @@ const localSettings = ref({
     fertilizer: 'none',
     fertilizer_multi_season: false,
     fertilizer_land_types: [...allFertilizerLandTypes],
+    smart_ripen: false,
+    smart_ripen_threshold: 120,
   },
 })
 
@@ -475,6 +477,8 @@ function syncLocalSettings() {
         fertilizer: 'none',
         fertilizer_multi_season: false,
         fertilizer_land_types: [...allFertilizerLandTypes],
+        smart_ripen: false,
+        smart_ripen_threshold: 120,
       }
     }
     else {
@@ -510,6 +514,8 @@ function syncLocalSettings() {
         fertilizer: 'none',
         fertilizer_multi_season: false,
         fertilizer_land_types: [...allFertilizerLandTypes],
+        smart_ripen: false,
+        smart_ripen_threshold: 120,
       }
       localSettings.value.automation = {
         ...defaults,
@@ -1213,6 +1219,7 @@ async function handleTestOffline() {
             <BaseSwitch v-model="localSettings.automation.month_card" label="自动月卡奖励" />
             <BaseSwitch v-model="localSettings.automation.open_server_gift" label="自动开服红包" />
             <BaseSwitch v-model="localSettings.automation.fertilizer_gift" label="自动填充化肥" />
+            <BaseSwitch v-model="localSettings.automation.smart_ripen" label="智能催熟" />
             <BaseSwitch v-model="localSettings.automation.fertilizer_buy" label="自动购买化肥" />
           </div>
 
@@ -1253,6 +1260,23 @@ async function handleTestOffline() {
             </p>
             <p v-if="localSettings.automation.fertilizer_buy_mode === 'unlimited'" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
               无限购买模式下不能同时选择两种化肥
+            </p>
+          </div>
+
+          <div v-if="localSettings.automation.smart_ripen" class="border border-purple-200 rounded bg-purple-50/60 p-3 dark:border-purple-800/60 dark:bg-purple-900/10">
+            <div class="mb-2 text-sm text-purple-800 font-medium dark:text-purple-300">
+              智能催熟配置
+            </div>
+            <BaseInput
+              v-model.number="localSettings.automation.smart_ripen_threshold"
+              label="催熟阈值（秒）：作物成熟时间小于此值时立即施有机肥并收获"
+              type="number"
+              min="5"
+              max="1800"
+              step="1"
+            />
+            <p class="mt-2 text-xs text-purple-700 dark:text-purple-300">
+              取值范围：5-1800 秒，默认 120 秒。施肥延时 150 毫秒。
             </p>
           </div>
 

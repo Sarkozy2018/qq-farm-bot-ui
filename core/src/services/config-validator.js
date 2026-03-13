@@ -85,6 +85,8 @@ const AUTOMATION_SCHEMA = {
             oneOf: ['none', 'normal', 'organic', 'both'],
             default: 'none',
         },
+        smart_ripen: { type: 'boolean', default: false },
+        smart_ripen_threshold: { type: 'number', min: 5, max: 1800, default: 120 },
     },
     additionalProperties: false,
 };
