@@ -5,7 +5,7 @@
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
 const { parentPort } = require('node:worker_threads');
-const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getAutomation, getFriendCache, updateFriendCache } = require('../models/store');
+const { isAutomationOn, getFriendQuietHours, getFriendBlacklist, getAutomation, getFriendCache, updateFriendCache, getIntervals } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
@@ -1235,8 +1235,12 @@ async function checkFriends() {
                 }
             }
             
-            // 稍微等待，避免请求过快
-            await sleep(200);
+            // 访问好友间隔：使用偷菜间隔配置
+            const intervals = getIntervals();
+            const stealMin = Math.max(1, Number(intervals.stealMin) || 1);
+            const stealMax = Math.max(stealMin, Number(intervals.stealMax) || stealMin);
+            const delayMs = (stealMin === stealMax ? stealMin : (stealMin + Math.floor(Math.random() * (stealMax - stealMin + 1)))) * 1000;
+            await sleep(delayMs);
         }
 
         // 偷菜后自动出售
