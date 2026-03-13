@@ -93,5 +93,23 @@ export const useBagStore = defineStore('bag', () => {
     }
   }
 
-  return { items, itemsByType, allItems, dashboardItems, originItems, loading, fetchBag, sellItems }
+  async function useItems(accountId: string, items: Array<{ itemId?: number | string, id?: number | string, count?: number | string, uid?: number | string }>) {
+    if (!accountId || !items || items.length === 0)
+      return { ok: false, error: '参数无效' }
+
+    try {
+      const res = await api.post('/api/bag/use', {
+        items,
+      }, {
+        headers: { 'x-account-id': accountId },
+      })
+      return res.data
+    }
+    catch (e) {
+      console.error(e)
+      return { ok: false, error: e instanceof Error ? e.message : '使用失败' }
+    }
+  }
+
+  return { items, itemsByType, allItems, dashboardItems, originItems, loading, fetchBag, sellItems, useItems }
 })

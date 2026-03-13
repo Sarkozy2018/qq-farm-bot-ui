@@ -39,6 +39,21 @@ const displayItems = computed(() => {
 
 const selectedCount = computed(() => selectedItems.value.size)
 
+const isUsing = ref(false)
+
+// 判断是否只选中了单个可使用物品
+const canUseSelectedItem = computed(() => {
+  if (selectedItems.value.size !== 1) {
+    return false
+  }
+  const item = selectedItems.value.values().next().value
+  if (!item) {
+    return false
+  }
+  const itemType = Number(item.itemType || 0)
+  return itemType === 7 || itemType === 11
+})
+
 const totalSelectedValue = computed(() => {
   let total = 0
   selectedItems.value.forEach((item) => {
@@ -73,7 +88,7 @@ async function handleSellSelected() {
   if (!currentAccountId.value || selectedItems.value.size === 0)
     return
 
-  // 根据选中物品的 id匹配 originItems 中的原始物品
+  // 根据选中物品的 id 匹配 originItems 中的原始物品
   const itemsToSell = []
   for (const selectedItem of selectedItems.value.values()) {
     const matchedOriginItems = originItems.value?.filter(
@@ -102,6 +117,41 @@ async function handleSellSelected() {
   }
   finally {
     isSelling.value = false
+  }
+}
+
+async function handleUseSelected() {
+  if (!currentAccountId.value || selectedItems.value.size === 0)
+    return
+
+  // 只取第一个选中的物品
+  const firstSelectedItem = selectedItems.value.values().next().value
+  if (!firstSelectedItem)
+    return
+
+  const itemsToUse = [{
+    itemId: firstSelectedItem.id,
+    count: firstSelectedItem.count, // 使用该物品的全部数量
+    uid: 0,
+  }]
+
+  isUsing.value = true
+  try {
+    const result = await bagStore.useItems(currentAccountId.value, itemsToUse)
+    if (result.ok && result.data?.success) {
+      toastStore.success(`成功使用 ${firstSelectedItem.name || '物品'} x${firstSelectedItem.count}`)
+      clearSelection()
+      await loadBag()
+    }
+    else {
+      toastStore.error(result.error || result.data?.error || '使用失败')
+    }
+  }
+  catch (e) {
+    toastStore.error(e instanceof Error ? e.message : '使用失败')
+  }
+  finally {
+    isUsing.value = false
   }
 }
 
@@ -175,6 +225,14 @@ useIntervalFn(loadBag, 60000)
             class="px-3 py-1.5 text-xs font-medium rounded-md transition bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
           >
             取消选择
+          </button>
+          <button
+            v-if="canUseSelectedItem"
+            @click="handleUseSelected"
+            :disabled="isUsing"
+            class="px-4 py-1.5 text-xs font-medium rounded-md transition bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isUsing ? '使用中...' : '使用' }}
           </button>
           <button
             @click="handleSellSelected"
@@ -309,6 +367,15 @@ useIntervalFn(loadBag, 60000)
               : 'border-gray-200 bg-white',
           ]"
         >
+          <!-- 可使用标记 -->
+          <div
+            v-if="item.itemType === 7 || item.itemType === 11"
+            class="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-white"
+            title="可使用物品"
+          >
+            <div class="i-carbon-checkmark-outline text-sm" />
+          </div>
+
           <!-- 选择标记 -->
           <div
             class="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 transition"

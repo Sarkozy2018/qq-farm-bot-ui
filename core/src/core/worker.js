@@ -683,6 +683,17 @@ async function handleApiCall(msg) {
                 result = { success: true, gain, reply };
                 break;
             }
+            case 'useBagItems': {
+                const itemsToUse = args && Array.isArray(args[0]) ? args[0] : [];
+                const warehouse = require('../services/warehouse');
+                try {
+                    const reply = await warehouse.batchUseItems(itemsToUse);
+                    result = { success: true, reply };
+                } catch (e) {
+                    result = { success: false, error: e.message };
+                }
+                break;
+            }
             case 'setAutomation': {
                 const payload = args && args[0] ? args[0] : {};
                 applyRuntimeConfig({ automation: { [payload.key]: payload.value } }, true);

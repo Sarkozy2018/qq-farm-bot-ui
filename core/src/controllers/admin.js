@@ -560,6 +560,36 @@ function startAdminServer(dataProvider) {
         }
     });
 
+    // API: 批量使用背包物品
+    app.post('/api/bag/use', async (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        
+        const { items } = req.body || {};
+        if (!items || !Array.isArray(items)) {
+            return res.status(400).json({ ok: false, error: 'items 必须是一个数组' });
+        }
+        
+        // 验证每个物品的 itemId 和 count
+        for (const item of items) {
+            const itemId = Number(item.itemId || item.id || 0);
+            if (!itemId || !Number.isFinite(itemId)) {
+                return res.status(400).json({ ok: false, error: '物品 ID 无效' });
+            }
+            const count = Number(item.count || 1);
+            if (!Number.isFinite(count) || count <= 0) {
+                return res.status(400).json({ ok: false, error: '物品数量无效' });
+            }
+        }
+        
+        try {
+            const result = await provider.useBagItems(id, items);
+            res.json({ ok: true, data: result });
+        } catch (e) {
+            handleApiError(res, e);
+        }
+    });
+
     // API: 每日礼包状态总览
     app.get('/api/daily-gifts', async (req, res) => {
         const id = getAccId(req);
