@@ -417,7 +417,7 @@ const localQrLogin = ref({
 
 const localRuntimeClient = ref({
   serverUrl: 'wss://gate-obt.nqf.qq.com/prod/ws',
-  clientVersion: '1.6.2.18_20260227',
+  clientVersion: '1.7.0.6_20260313',
   os: 'iOS',
   device_info: {
     sys_software: 'iOS 26.2.1',
