@@ -317,7 +317,7 @@ watch(
                   {{ platform }}
                 </span>
                 <span class="truncate text-xs text-gray-400">
-                  {{ currentAccount?.uin || currentAccount?.id || getAccountMeta(currentAccount) }}
+                  {{ currentAccount?.uin ? maskQQ(currentAccount.uin) : getAccountMeta(currentAccount) }}
                 </span>
               </div>
             </div>
@@ -353,7 +353,7 @@ watch(
                 </div>
                 <div class="min-w-0 flex flex-1 flex-col items-start">
                   <span class="w-full truncate text-left text-sm font-medium">
-                    {{ acc.nick && acc.name ? `${acc.nick} (${acc.name})` : acc.name || acc.nick || acc.uin }}
+                    {{ acc.nick && acc.name ? `${acc.nick} (${acc.name})` : acc.name || acc.nick || (acc.uin ? maskQQ(acc.uin) : acc.id) }}
                   </span>
                   <div class="flex items-center gap-1.5">
                     <span
