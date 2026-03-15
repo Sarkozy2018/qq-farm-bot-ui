@@ -99,6 +99,10 @@ const DEFAULT_ACCOUNT_CONFIG = {
         stealMin: 1,  // 偷菜间隔最小值 (秒)
         stealMax: 2,  // 偷菜间隔最大值 (秒)
     },
+    friendBlockLevel: {
+        enabled: true,
+        Level: 1,
+    },
     friendQuietHours: {
         enabled: false,
         start: '23:00',
@@ -118,6 +122,7 @@ let accountFallbackConfig = {
         friend_steal_blacklist: [...DEFAULT_STEAL_PLANT_BLACKLIST],
     },
     intervals: { ...DEFAULT_ACCOUNT_CONFIG.intervals },
+    friendBlockLevel: { ...DEFAULT_ACCOUNT_CONFIG.friendBlockLevel },
     friendQuietHours: { ...DEFAULT_ACCOUNT_CONFIG.friendQuietHours },
 };
 
@@ -422,6 +427,7 @@ function cloneAccountConfig(base = DEFAULT_ACCOUNT_CONFIG) {
         ...base,
         automation,
         intervals: { ...(base.intervals || DEFAULT_ACCOUNT_CONFIG.intervals) },
+        friendBlockLevel: { ...(base.friendBlockLevel || DEFAULT_ACCOUNT_CONFIG.friendBlockLevel) },
         friendQuietHours: { ...(base.friendQuietHours || DEFAULT_ACCOUNT_CONFIG.friendQuietHours) },
         friendBlacklist: rawBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
         friendCache: normalizeFriendCache(rawFriendCache),
@@ -497,6 +503,14 @@ function normalizeAccountConfig(input, fallback = accountFallbackConfig) {
         cfg.intervals = normalizeIntervals(cfg.intervals);
     } else {
         cfg.intervals = normalizeIntervals(cfg.intervals);
+    }
+
+    if (src.friendBlockLevel && typeof src.friendBlockLevel === 'object') {
+        const old = cfg.friendBlockLevel || {};
+        cfg.friendBlockLevel = {
+            enabled: src.friendBlockLevel.enabled !== undefined ? !!src.friendBlockLevel.enabled : !!old.enabled,
+            Level: normalizeBlockLevel(src.friendBlockLevel.Level),
+        };
     }
 
     if (src.friendQuietHours && typeof src.friendQuietHours === 'object') {
@@ -702,6 +716,7 @@ function getConfigSnapshot(accountId) {
         plantingStrategy: cfg.plantingStrategy,
         preferredSeedId: cfg.preferredSeedId,
         intervals: { ...cfg.intervals },
+        friendBlockLevel: { ...cfg.friendBlockLevel },
         friendQuietHours: { ...cfg.friendQuietHours },
         friendBlacklist: [...(cfg.friendBlacklist || [])],
         stealCropBlacklist: [...(cfg.stealCropBlacklist || [])],
@@ -769,6 +784,14 @@ function applyConfigSnapshot(snapshot, options = {}) {
             next.intervals[type] = Math.max(1, Number.parseInt(sec, 10) || next.intervals[type] || 1);
         }
         next.intervals = normalizeIntervals(next.intervals);
+    }
+
+    if (cfg.friendBlockLevel && typeof cfg.friendBlockLevel === 'object') {
+        const old = next.friendBlockLevel || {};
+        next.friendBlockLevel = {
+            enabled: cfg.friendBlockLevel.enabled !== undefined ? !!cfg.friendBlockLevel.enabled : !!old.enabled,
+            Level: normalizeBlockLevel(cfg.friendBlockLevel.Level),
+        };
     }
 
     if (cfg.friendQuietHours && typeof cfg.friendQuietHours === 'object') {
@@ -871,6 +894,18 @@ function normalizeIntervals(intervals) {
         stealMin,
         stealMax,
     };
+}
+
+function normalizeBlockLevel(Level) {
+    const num = Number(Level);
+    if (Number.isNaN(num) || num < 1) {
+        return 1;
+    }
+    return Math.floor(num);
+}
+
+function getFriendBlockLevel(accountId) {
+    return { ...getAccountConfigSnapshot(accountId).friendBlockLevel };
 }
 
 function normalizeTimeString(v, fallback) {
@@ -1038,6 +1073,7 @@ module.exports = {
     getBagSeedPriority,
     setPlantingStrategy,
     getIntervals,
+    getFriendBlockLevel,
     getFriendQuietHours,
     getFriendBlacklist,
     setFriendBlacklist,

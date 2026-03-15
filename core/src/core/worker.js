@@ -8,7 +8,7 @@ const { getLevelExpProgress } = require('../config/gameConfig');
 const { getAutomation, getPreferredSeed, getConfigSnapshot, applyConfigSnapshot } = require('../models/store');
 const { checkAndClaimEmails } = require('../services/email');
 const { getEmailDailyState } = require('../services/email');
-const { checkFarm, startFarmCheckLoop, stopFarmCheckLoop, refreshFarmCheckLoop, getLandsDetail, getAvailableSeeds, runFarmOperation, runFertilizerByConfig } = require('../services/farm');
+const { checkFarm, startFarmCheckLoop, stopFarmCheckLoop, refreshFarmCheckLoop, getLandsDetail, getAvailableSeeds, runFarmOperation, runSingleLandOperation, runFertilizerByConfig } = require('../services/farm');
 const { checkFriends, startFriendCheckLoop, stopFriendCheckLoop, refreshFriendCheckLoop, getFriendsList, getFriendLandsDetail, doFriendOperation } = require('../services/friend');
 const { getInteractRecords, extractFriendsFromInteractRecords } = require('../services/interact');
 const { processInviteCodes } = require('../services/invite');
@@ -27,7 +27,7 @@ const { connect, reconnect, cleanup, getWs, getUserState, networkEvents } = requ
 const { loadProto } = require('../utils/proto');
 const cryptoWasm = require('../utils/crypto-wasm');
 const { setLogHook, log, toNum } = require('../utils/utils');
-const { validateAutomation, validateIntervals, validateQuietHours } = require('../services/config-validator');
+const { validateAutomation, validateIntervals, validateQuietHours, validateBlockLevel } = require('../services/config-validator');
 
 if (parentPort && workerData && workerData.accountId && !process.env.FARM_ACCOUNT_ID) {
     process.env.FARM_ACCOUNT_ID = String(workerData.accountId);
@@ -377,6 +377,9 @@ function applyRuntimeConfig(snapshot, syncNow = false) {
             if (snapshot.intervals) {
                 snapshot.intervals = validateIntervals(snapshot.intervals);
             }
+            if (snapshot.friendBlockLevel) {
+                snapshot.friendBlockLevel = validateBlockLevel(snapshot.friendBlockLevel);
+            }
             if (snapshot.friendQuietHours) {
                 snapshot.friendQuietHours = validateQuietHours(snapshot.friendQuietHours);
             }
@@ -702,6 +705,9 @@ async function handleApiCall(msg) {
             }
             case 'doFarmOp':
                 result = await runFarmOperation(args[0], { automated: false }); // opType
+                break;
+            case 'doSingleLandOp':
+                result = await runSingleLandOperation(args[0] || {});
                 break;
             case 'getAnalytics': {
                 const { getPlantRankings } = require('../services/analytics');

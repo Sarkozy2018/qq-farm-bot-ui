@@ -126,6 +126,7 @@ function createDataProvider(options) {
         },
 
         doFarmOp: (accountRef, opType) => callWorkerApi(resolveAccountRefId(accountRef), 'doFarmOp', opType),
+        doSingleLandOp: (accountRef, payload) => callWorkerApi(resolveAccountRefId(accountRef), 'doSingleLandOp', payload),
         doAnalytics: (accountRef, sortBy) => callWorkerApi(resolveAccountRefId(accountRef), 'getAnalytics', sortBy),
         saveSettings: async (accountRef, payload) => {
             const accountId = resolveAccountRefId(accountRef);
@@ -141,6 +142,7 @@ function createDataProvider(options) {
                 preferredSeedId,
                 bagSeedPriority,
                 intervals: body.intervals,
+                friendBlockLevel: body.friendBlockLevel,
                 friendQuietHours: body.friendQuietHours,
             };
             store.applyConfigSnapshot(snapshot, { accountId });
@@ -151,6 +153,7 @@ function createDataProvider(options) {
                 preferredSeed: store.getPreferredSeed(accountId),
                 bagSeedPriority: store.getBagSeedPriority(accountId),
                 intervals: store.getIntervals(accountId),
+                friendBlockLevel: store.getFriendBlockLevel(accountId),
                 friendQuietHours: store.getFriendQuietHours(accountId),
                 configRevision: rev,
             };
